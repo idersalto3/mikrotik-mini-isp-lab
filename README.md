@@ -19,7 +19,7 @@ Esto es una base de referencia, no un ISP completo. Lo que sí está: entrada WA
 Lo que dejé afuera a propósito:
 
 - **Enlace mayorista real (/30 + BGP + bloque público):** en mi casa el internet lo da un módem con IP privada, así que no hay forma de simularlo con realismo. Igual lo explico en la sección 1 porque quería entender cómo funciona.
-- **RADIUS y CRM:** necesitan infraestructura extra (un servidor RADIUS y un sistema de gestión). Acá el cliente lo doy de alta a mano en Secrets. En la sección 5 cuento cómo se hace en producción.
+- **RADIUS y CRM:** necesitan infraestructura extra (un servidor RADIUS y un sistema de gestión). Acá el cliente lo doy de alta a mano en Secrets. Más abajo, en "Cómo escala esto en producción", cuento cómo se resuelve en una red real.
 - **Un solo cliente:** con uno alcanza para ver la mecánica. La gracia es que el segundo y el tercero se creen solos con la misma configuración.
 - **Firewall del CORE:** no le hice hardening. En una red real habría que proteger el acceso al router y filtrar tráfico, y queda para un próximo lab.
 - **Redundancia, monitoreo y OSPF:** idem, quedan para más adelante.
