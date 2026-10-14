@@ -208,7 +208,7 @@ MikroTik CHR, RouterOS v7.23.7, VirtualBox, WinBox, VLAN 802.1Q, PPPoE, IP Pool,
 
 ## Sobre mí
 
-Soy técnico en redes, de Argentina, y sigo formándome. Ahora estoy estudiando CCNA (ITN) y preparando MTCNA de MikroTik. Voy a ir sumando laboratorios a este perfil a medida que avance.
+Soy Técnico Universitario en Redes Informáticas y Telecomunicaciones (Universidad Siglo 21) y estoy cursando la Licenciatura en Informática, con 26 materias aprobadas. Hace varios años ayudo a usuarios con problemas de PC, software y redes domésticas, y lo que más me gusta es la parte de redes: quiero dedicarme a eso, empezando por soporte técnico en un ISP o una cooperativa. Ahora estoy cursando CCNA (módulo ITN) y preparando MTCNA de MikroTik, y voy a seguir subiendo laboratorios.
 
 LinkedIn: [linkedin.com/in/idersalto](https://www.linkedin.com/in/idersalto)
 
