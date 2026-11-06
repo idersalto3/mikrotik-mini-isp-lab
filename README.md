@@ -14,15 +14,14 @@ Recorrí la cadena completa: desde que entra el internet mayorista al CORE, pasa
 
 ## Qué cubre y qué dejé afuera (y por qué)
 
-Esto es una base de referencia, no un ISP completo. Lo que sí está: entrada WAN por DHCP Client, red de gestión separada, VLAN 100 como transporte, PPPoE Server con IP Pool y perfil de velocidad, Simple Queues dinámicas, y un CPE con PPPoE Client, bridge, DHCP y NAT.
+Esto es una base de referencia, no un ISP completo. Lo que sí está: entrada WAN por DHCP Client, red de gestión separada, VLAN 100 como transporte, PPPoE Server con IP Pool y perfil de velocidad, Simple Queues dinámicas, un CPE con PPPoE Client, bridge, DHCP y NAT, y una primera capa de hardening y firewall INPUT en el CORE.
 
 Lo que dejé afuera a propósito:
 
 - **Enlace mayorista real (/30 + BGP + bloque público):** en mi casa el internet lo da un módem con IP privada, así que no hay forma de simularlo con realismo. Igual lo explico en la sección 1 porque quería entender cómo funciona.
 - **RADIUS y CRM:** necesitan infraestructura extra (un servidor RADIUS y un sistema de gestión). Acá el cliente lo doy de alta a mano en Secrets. Más abajo, en "Cómo escala esto en producción", cuento cómo se resuelve en una red real.
 - **Un solo cliente:** con uno alcanza para ver la mecánica. La gracia es que el segundo y el tercero se creen solos con la misma configuración.
-- **Firewall del CORE:** no le hice hardening. En una red real habría que proteger el acceso al router y filtrar tráfico, y queda para un próximo lab.
-- **Redundancia, monitoreo y OSPF:** idem, quedan para más adelante.
+- **Redundancia, monitoreo y OSPF:** quedan para más adelante.
 
 ## Topología
 
@@ -68,6 +67,8 @@ Una vez que esta frontera queda funcionando, prácticamente no se toca más en e
 ### 2. Gestión separada y transporte por VLAN
 
 Lo primero que hice en el CORE fue separar la gestión del tráfico de los clientes. Usé **ether3** con una IP fija (`192.168.56.10/24`) y le puse de comentario `gestion`. La idea es que el administrador pueda entrar por WinBox (o por VPN, en un caso real) por un canal aparte, y que el tráfico de Netflix o las descargas de los abonados no afecte el acceso al equipo.
+
+Para poder administrar esa interfaz desde mi PC, corregí también la conexión de la VM en VirtualBox: el **adaptador 3** del CORE estaba en `Internal Network` y lo cambié a `Host-Only Adapter`, seleccionando `VirtualBox Host-Only Ethernet Adapter`. Después actualicé la lista **Neighbors** de WinBox y el CORE apareció con `192.168.56.10`. La PC de gestión quedó en `192.168.56.1`. Esta corrección resolvió la conectividad entre el host y la interfaz de gestión; no fue una regla de firewall.
 
 Después pasé a **ether2**, que en mi topología hace de salida hacia la planta externa (en la calle sería la OLT y de ahí por los postes hasta las cajas ópticas, las CTO). Acá entendí por qué no se configura un /30 estático a mano para cada vecino: sería laburar a lo picapiedra, anotando IPs en una planilla y arriesgándote a pisar direcciones cuando tenés cientos de clientes.
 
@@ -156,6 +157,40 @@ Al bridge le puse la puerta de enlace típica de una casa (`192.168.88.1/24`), u
 
 ![CPE: PPPoE Client en estado Running](docs/img/03-cpe-pppoe-running.png)
 
+### 5. Seguridad y administración del CORE: hardening y Firewall (Input)
+
+Después de armar la conectividad PPPoE, trabajé sobre la protección del propio router CORE. En RouterOS, la cadena `input` procesa los paquetes cuyo destino es el router. Es distinta de `forward`, que procesa el tráfico que atraviesa el equipo, por ejemplo el tráfico de un CPE que sale hacia internet.
+
+Primero separé el acceso administrativo por dos capas:
+
+- **Hardening de servicios (`/ip service`):** deshabilité `telnet`, `ftp`, `www`, `api` y `api-ssl`, que no necesitaba para este laboratorio. Restringí `winbox` y `ssh` para que acepten conexiones cuya IP de origen pertenezca a `192.168.56.0/24`, la subred de gestión. En la salida final de `/ip service print detail`, `www-ssl` también figuraba deshabilitado.
+- **Firewall INPUT (`/ip firewall filter`):** agregué reglas ordenadas para aceptar conexiones establecidas/relacionadas, descartar paquetes inválidos, permitir ICMP excepto por la WAN (`ether1`), aceptar la administración que entra por `ether3` desde `192.168.56.0/24` y descartar al final el resto del tráfico dirigido al CORE.
+
+La lista de direcciones permitidas de `/ip service` controla quién puede conectarse a cada servicio administrativo. El firewall agrega otra barrera: aunque un paquete llegue al CORE, tiene que coincidir con una regla de aceptación antes de alcanzar el descarte final.
+
+```routeros
+# ===== HARDENING DE SERVICIOS EN EL CORE =====
+/ip service disable telnet,ftp,www,api,api-ssl
+/ip service set winbox address=192.168.56.0/24
+/ip service set ssh address=192.168.56.0/24
+
+# ===== FIREWALL INPUT DEL CORE =====
+/ip firewall filter add chain=input connection-state=established,related,untracked action=accept comment="Aceptar conexiones ya establecidas"
+/ip firewall filter add chain=input connection-state=invalid action=drop comment="Tirar paquetes invalidos"
+/ip firewall filter add chain=input protocol=icmp in-interface=!ether1 action=accept comment="Permitir ping desde clientes y gestion (menos desde WAN)"
+/ip firewall filter add chain=input in-interface=ether3 src-address=192.168.56.0/24 action=accept comment="Permitir entrar al router desde ether3"
+/ip firewall filter add chain=input action=drop comment="Bloquear todo el resto hacia el CORE"
+```
+
+La regla ICMP permite diagnóstico desde las interfaces internas y de clientes, pero excluye la WAN `ether1`. La regla de gestión es más específica: exige tanto que el paquete ingrese por `ether3` como que su IP de origen pertenezca a la subred de administración. La última regla cierra el acceso restante al propio router. Este conjunto no es una política de filtrado de tráfico reenviado: el tráfico de tránsito se procesa en `forward`.
+
+Para llegar a la interfaz de gestión también tuve que resolver un detalle de VirtualBox, explicado en la sección 2: el adaptador 3 del CORE pasó de `Internal Network` a `Host-Only Adapter`. Así pude administrar `192.168.56.10` desde la PC `192.168.56.1`.
+
+**Inspección adicional:** en `/ip service print detail` apareció una entrada llamada `reverse-proxy` en el puerto 443. Revisé `/ip/reverse-proxy print detail` y no aparecieron reglas configuradas; la búsqueda de registros con el tópico `rproxy` tampoco devolvió resultados. No configuré ni modifiqué esa función. La dejé como observación para investigar antes de decidir si hace falta deshabilitar el servicio.
+
+**Prueba específica de SSH:** desde el CPE (`10.0.100.250`) intenté conectarme por SSH a la IP PPPoE del CORE (`10.0.100.1`). La conexión no se estableció. Para comprobar el recorrido agregué temporalmente una regla INPUT que coincidía únicamente con TCP/22 desde `10.0.100.250` hacia `10.0.100.1`; su contador registró **4 paquetes y 240 bytes**. Después eliminé esa regla de diagnóstico. El resultado confirma que el intento llegó al firewall del CORE y fue descartado; la regla temporal no forma parte de la configuración final.
+
+No incluí todavía el hardening de Capa 2 propuesto en una primera versión del ejercicio (limitar Neighbor Discovery, MAC WinBox y MAC Server a una lista de interfaces de gestión), porque no forma parte de las pruebas documentadas en esta etapa.
 ---
 
 ## Cómo lo verifiqué
@@ -163,12 +198,16 @@ Al bridge le puse la puerta de enlace típica de una casa (`192.168.88.1/24`), u
 - El PPPoE Client del CPE levanta con la "R" y muestra tráfico Tx/Rx.
 - El CPE recibe una IP del pool (`10.0.100.250` en mi primera prueba).
 - En el CORE aparece la Simple Queue dinámica con **Upload 5M / Download 20M**, como define el plan.
-- `ping 10.0.100.1` desde el CPE hacia el CORE responde en menos de 1 ms y sin perder paquetes.
-- `ping 8.8.8.8` desde el CPE responde (alrededor de 17 ms, TTL 117), o sea que el circuito CPE, VLAN/PPPoE, CORE e internet funciona de punta a punta.
+- Desde el CPE, `ping 10.0.100.1` respondió **6 de 6 paquetes**, sin pérdida y con un promedio aproximado de 0,81 ms.
+- Desde el CPE, `ping 8.8.8.8` respondió **5 de 5 paquetes**, sin pérdida y con un promedio aproximado de 10,61 ms. Esto comprueba que el tráfico de salida del CPE sigue funcionando después de aplicar el firewall INPUT.
+- Desde la PC de gestión (`192.168.56.1`) pude entrar por WinBox al CORE (`192.168.56.10`) a través de `ether3`.
+- El intento SSH desde el CPE hacia `10.0.100.1` no estableció sesión. La regla temporal específica para ese intento registró 4 paquetes/240 bytes y fue eliminada al terminar la prueba.
+
+El contador de la regla general `drop` también aumentó durante las pruebas. Para obtener una comprobación inequívoca del intento SSH, usé la regla temporal específica descrita en la sección 5.
 
 ![CPE: ping a internet](docs/img/04-cpe-ping-internet.png)
 
-Dos aclaraciones para ser justo con lo que probé: el ping a internet lo hice desde el propio CPE y todavía no desde un dispositivo conectado a su LAN. Y en el lab hay doble NAT (en el CPE y en el CORE) porque necesitaba que el CORE le diera salida a los CPE por mi módem. En una red real, con el bloque público ruteado, no iría NAT en el CORE.
+Dos aclaraciones para ser justo con lo que probé: los pings a internet se hicieron desde el propio CPE y todavía no desde un dispositivo conectado a su LAN. Y en el lab hay doble NAT (en el CPE y en el CORE) porque necesitaba que el CORE le diera salida a los CPE por mi módem. En una red real, con el bloque público ruteado, no iría NAT en el CORE.
 
 ## Problemas que me encontré y qué aprendí
 
@@ -176,6 +215,9 @@ Dos aclaraciones para ser justo con lo que probé: el ping a internet lo hice de
 - **VLAN colgada de la interfaz equivocada:** en el CPE había creado `vlan100` sobre ether1 y no levantaba. Diagnosticando de abajo hacia arriba (Capa 1 y 2) vi que en el CORE el tráfico salía por ether2. Aprendí a verificar bien el mapeo de puertos antes de tocar Capa 3.
 - **Sentido del `rate-limit` en PPP:** el formato es `rx/tx` desde el punto de vista del router, o sea subida/bajada del cliente. Al principio puse `20M/5M` y en Simple Queues vi Upload 20M / Download 5M, justo al revés de lo que quería para un plan de "20 megas". Lo corregí a `5M/20M` y verifiqué que la cola quedó en Upload 5M / Download 20M.
 - **Configuración heredada del clon:** tenía un DHCP Client viejo en ether1. Por eso conviene resetear siempre sin configuración por defecto.
+- **Acceso de gestión desde VirtualBox:** el adaptador 3 de la VM CORE estaba conectado a `Internal Network`, por eso la PC host no llegaba a la red de gestión. Al cambiarlo a `Host-Only Adapter` y seleccionar `VirtualBox Host-Only Ethernet Adapter`, WinBox encontró el CORE en `192.168.56.10`.
+- **Prueba de firewall en el router correcto:** al consultar los contadores desde el CPE no aparecían las reglas porque el firewall que estaba probando está configurado en el CORE. Los contadores se consultan en el equipo cuyas reglas se quieren verificar.
+- **Diferencia entre INPUT y FORWARD:** aprendí que INPUT protege al propio router, mientras que FORWARD trata el tráfico que pasa a través de él. Por eso el ping del CPE hacia internet pudo seguir funcionando aunque cerré el acceso no autorizado al CORE.
 
 ---
 
@@ -197,14 +239,16 @@ El lab queda local para mostrar la base, pero estuve investigando cómo se manej
 
 - [ ] Probar la salida a internet desde un dispositivo conectado a la LAN del CPE.
 - [ ] Sumar un segundo CPE y verificar la asignación automática y las colas en paralelo.
-- [ ] Reglas básicas de firewall en el CORE (proteger la gestión y filtrar tráfico hacia el router).
+- [x] Hardening básico de servicios y firewall INPUT en el CORE (proteger la gestión y filtrar tráfico dirigido al router).
+- [ ] Completar el hardening de Capa 2: limitar Neighbor Discovery, MAC WinBox y MAC Server a la interfaz o lista de gestión.
+- [ ] Confirmar si se necesita el servicio reverse-proxy y deshabilitarlo si no se utiliza.
 - [ ] Probar FreeRADIUS para autenticación centralizada.
 - [ ] Practicar la promoción por horario con Scripts y Scheduler.
 - [ ] Armar un lab de OSPF con un router de distribución.
 
 ## Tecnologías y conceptos
 
-MikroTik CHR, RouterOS v7.23.7, VirtualBox, WinBox, VLAN 802.1Q, PPPoE, IP Pool, DHCP Client y Server, Simple Queues, NAT masquerade, bridge, Static Lease, dst-nat.
+MikroTik CHR, RouterOS v7.23.7, VirtualBox, WinBox, Host-Only Adapter, VLAN 802.1Q, PPPoE, IP Pool, DHCP Client y Server, Simple Queues, NAT masquerade, bridge, Static Lease, dst-nat, Firewall Filter (Input), estados de conexión, hardening de servicios, administración por subred de gestión.
 
 ## Sobre mí
 
