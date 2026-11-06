@@ -157,7 +157,7 @@ Al bridge le puse la puerta de enlace típica de una casa (`192.168.88.1/24`), u
 
 ![CPE: PPPoE Client en estado Running](docs/img/03-cpe-pppoe-running.png)
 
-### 5. Seguridad y administración del CORE: hardening y Firewall (Input)
+### 5. Seguridad en el CORE: hardening de servicios y Firewall INPUT
 
 Después de armar la conectividad PPPoE, trabajé sobre la protección del propio router CORE. En RouterOS, la cadena `input` procesa los paquetes cuyo destino es el router. Es distinta de `forward`, que procesa el tráfico que atraviesa el equipo, por ejemplo el tráfico de un CPE que sale hacia internet.
 
@@ -191,6 +191,7 @@ Para llegar a la interfaz de gestión también tuve que resolver un detalle de V
 **Prueba específica de SSH:** desde el CPE (`10.0.100.250`) intenté conectarme por SSH a la IP PPPoE del CORE (`10.0.100.1`). La conexión no se estableció. Para comprobar el recorrido agregué temporalmente una regla INPUT que coincidía únicamente con TCP/22 desde `10.0.100.250` hacia `10.0.100.1`; su contador registró **4 paquetes y 240 bytes**. Después eliminé esa regla de diagnóstico. El resultado confirma que el intento llegó al firewall del CORE y fue descartado; la regla temporal no forma parte de la configuración final.
 
 No incluí todavía el hardening de Capa 2 propuesto en una primera versión del ejercicio (limitar Neighbor Discovery, MAC WinBox y MAC Server a una lista de interfaces de gestión), porque no forma parte de las pruebas documentadas en esta etapa.
+
 ---
 
 ## Cómo lo verifiqué
@@ -237,11 +238,11 @@ El lab queda local para mostrar la base, pero estuve investigando cómo se manej
 
 ## Próximos pasos
 
+- [x] Hardening básico de servicios y firewall INPUT en el CORE (proteger la gestión y filtrar tráfico dirigido al router).
 - [ ] Probar la salida a internet desde un dispositivo conectado a la LAN del CPE.
 - [ ] Sumar un segundo CPE y verificar la asignación automática y las colas en paralelo.
-- [x] Hardening básico de servicios y firewall INPUT en el CORE (proteger la gestión y filtrar tráfico dirigido al router).
-- [ ] Completar el hardening de Capa 2: limitar Neighbor Discovery, MAC WinBox y MAC Server a la interfaz o lista de gestión.
-- [ ] Confirmar si se necesita el servicio reverse-proxy y deshabilitarlo si no se utiliza.
+- [ ] Completar el hardening de Capa 2: limitar Neighbor Discovery, MAC WinBox y MAC Server a una lista de interfaces permitidas para gestión.
+- [ ] Investigar el servicio reverse-proxy y confirmar si se utiliza; deshabilitarlo solamente si se verifica que no hace falta.
 - [ ] Probar FreeRADIUS para autenticación centralizada.
 - [ ] Practicar la promoción por horario con Scripts y Scheduler.
 - [ ] Armar un lab de OSPF con un router de distribución.
