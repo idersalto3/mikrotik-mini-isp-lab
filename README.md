@@ -191,6 +191,14 @@ Para llegar a la interfaz de gestión también tuve que resolver un detalle de V
 **Prueba específica de SSH:** desde el CPE (`10.0.100.250`) intenté conectarme por SSH a la IP PPPoE del CORE (`10.0.100.1`). La conexión no se estableció. Para comprobar el recorrido agregué temporalmente una regla INPUT que coincidía únicamente con TCP/22 desde `10.0.100.250` hacia `10.0.100.1`; su contador registró **4 paquetes y 240 bytes**. Después eliminé esa regla de diagnóstico. El resultado confirma que el intento llegó al firewall del CORE y fue descartado; la regla temporal no forma parte de la configuración final.
 
 No incluí todavía el hardening de Capa 2 propuesto en una primera versión del ejercicio (limitar Neighbor Discovery, MAC WinBox y MAC Server a una lista de interfaces de gestión), porque no forma parte de las pruebas documentadas en esta etapa.
+**Acceso remoto desde el CORE al CPE por SSH:** también comprobé el sentido inverso de administración. Con la VM del CPE encendida y la sesión PPPoE levantada, desde la terminal del CORE ejecuté:
+
+```routeros
+/system ssh 10.0.100.250 user=admin
+```
+
+Ingresé la contraseña del usuario y apareció la terminal de MikroTik RouterOS del CPE. En esta prueba, `10.0.100.250` era la dirección WAN PPPoE asignada al CPE; `10.0.100.1` es la dirección local del CORE. La restricción de `/ip service` configurada en el CORE controla las conexiones entrantes a los servicios del propio CORE, pero no impide que el CORE inicie una conexión SSH hacia otro equipo. El primer intento falló porque la VM del CPE estaba apagada; al encenderla, el acceso funcionó.
+
 
 ---
 
@@ -202,6 +210,7 @@ No incluí todavía el hardening de Capa 2 propuesto en una primera versión del
 - Desde el CPE, `ping 10.0.100.1` respondió **6 de 6 paquetes**, sin pérdida y con un promedio aproximado de 0,81 ms.
 - Desde el CPE, `ping 8.8.8.8` respondió **5 de 5 paquetes**, sin pérdida y con un promedio aproximado de 10,61 ms. Esto comprueba que el tráfico de salida del CPE sigue funcionando después de aplicar el firewall INPUT.
 - Desde la PC de gestión (`192.168.56.1`) pude entrar por WinBox al CORE (`192.168.56.10`) a través de `ether3`.
+- Desde la terminal del CORE pude abrir una sesión SSH hacia el CPE (`10.0.100.250`) usando el usuario `admin`. La prueba se realizó con la VM del CPE encendida y la sesión PPPoE activa.
 - El intento SSH desde el CPE hacia `10.0.100.1` no estableció sesión. La regla temporal específica para ese intento registró 4 paquetes/240 bytes y fue eliminada al terminar la prueba.
 
 El contador de la regla general `drop` también aumentó durante las pruebas. Para obtener una comprobación inequívoca del intento SSH, usé la regla temporal específica descrita en la sección 5.
@@ -253,7 +262,7 @@ MikroTik CHR, RouterOS v7.23.7, VirtualBox, WinBox, Host-Only Adapter, VLAN 802.
 
 ## Sobre mí
 
-Soy Técnico Universitario en Redes Informáticas y Telecomunicaciones (Universidad Siglo 21) y estoy cursando la Licenciatura en Informática, con 26 materias aprobadas. Hace varios años ayudo a usuarios con problemas de PC, software y redes domésticas, y lo que más me gusta es la parte de redes: quiero dedicarme a eso, empezando por soporte técnico en un ISP o una cooperativa. Ahora estoy cursando CCNA (módulo ITN) y preparando MTCNA de MikroTik, y voy a seguir subiendo laboratorios.
+Soy Técnico Universitario en Redes Informáticas y Telecomunicaciones (Universidad Siglo 21) y estoy cursando la Licenciatura en Informática, con 26 materias aprobadas. Desde 2020 trabajo de forma independiente brindando soporte técnico a usuarios, con tareas de hardware, software, Windows, conectividad y redes domésticas. Mi objetivo es desarrollarme profesionalmente en redes e infraestructura, con especial interés en proveedores de Internet y cooperativas. Continúo formándome mediante cursos y laboratorios prácticos con Cisco Packet Tracer y MikroTik RouterOS.
 
 LinkedIn: [linkedin.com/in/idersalto](https://www.linkedin.com/in/idersalto)
 
