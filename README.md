@@ -191,6 +191,7 @@ Para llegar a la interfaz de gestión también tuve que resolver un detalle de V
 **Prueba específica de SSH:** desde el CPE (`10.0.100.250`) intenté conectarme por SSH a la IP PPPoE del CORE (`10.0.100.1`). La conexión no se estableció. Para comprobar el recorrido agregué temporalmente una regla INPUT que coincidía únicamente con TCP/22 desde `10.0.100.250` hacia `10.0.100.1`; su contador registró **4 paquetes y 240 bytes**. Después eliminé esa regla de diagnóstico. El resultado confirma que el intento llegó al firewall del CORE y fue descartado; la regla temporal no forma parte de la configuración final.
 
 No incluí todavía el hardening de Capa 2 propuesto en una primera versión del ejercicio (limitar Neighbor Discovery, MAC WinBox y MAC Server a una lista de interfaces de gestión), porque no forma parte de las pruebas documentadas en esta etapa.
+
 **Acceso remoto desde el CORE al CPE por SSH:** también comprobé el sentido inverso de administración. Con la VM del CPE encendida y la sesión PPPoE levantada, desde la terminal del CORE ejecuté:
 
 ```routeros
@@ -198,7 +199,6 @@ No incluí todavía el hardening de Capa 2 propuesto en una primera versión del
 ```
 
 Ingresé la contraseña del usuario y apareció la terminal de MikroTik RouterOS del CPE. En esta prueba, `10.0.100.250` era la dirección WAN PPPoE asignada al CPE; `10.0.100.1` es la dirección local del CORE. La restricción de `/ip service` configurada en el CORE controla las conexiones entrantes a los servicios del propio CORE, pero no impide que el CORE inicie una conexión SSH hacia otro equipo. El primer intento falló porque la VM del CPE estaba apagada; al encenderla, el acceso funcionó.
-
 
 ---
 
